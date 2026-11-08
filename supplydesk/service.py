@@ -31,6 +31,7 @@ class OrderService:
 
         lines = []
         subtotal = 0
+        requested_quantities = {}
 
         for item in items:
             if not isinstance(item, dict):
@@ -54,8 +55,14 @@ class OrderService:
                     f"{self.MAX_ITEM_QUANTITY}."
                 )
 
-            if quantity > product["stock"]:
-                raise ValueError("Not enough stock for " + product["product_id"] + ".")
+            product_id = product["product_id"]
+
+            requested_quantities[product_id] = (
+                requested_quantities.get(product_id, 0) + quantity
+            )
+
+            if requested_quantities[product_id] > product["stock"]:
+                raise ValueError("Not enough stock for " + product_id + ".")
 
             line_total = product["unit_price_cents"] * quantity
             subtotal += line_total
@@ -71,7 +78,7 @@ class OrderService:
         discount = 0
 
         if (customer_type == "student"
-                and subtotal > self.STUDENT_DISCOUNT_THRESHOLD_CENTS):
+                and subtotal >= self.STUDENT_DISCOUNT_THRESHOLD_CENTS):
             discount = (
                 subtotal * self.STUDENT_DISCOUNT_PERCENT
                 + self.DISCOUNT_ROUNDING_ADJUSTMENT
@@ -143,6 +150,8 @@ class OrderService:
                 break
         if order is None:
             raise ValueError("Unknown order: " + order_id)
+        if order["status"] == "cancelled":
+            return order
         for line in order["items"]:
             for product in state["catalog"]:
                 if product["product_id"] == line["product_id"]:
