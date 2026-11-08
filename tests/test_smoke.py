@@ -129,6 +129,79 @@ class OrderSmokeTests(unittest.TestCase):
         self.assertEqual(cancelled["status"], "cancelled")
         self.assertEqual(self.service.catalog(), stock_after_first_cancellation)
 
+    def test_regular_express_quote(self):
+        quote = self.service.quote(
+            "regular",
+            [{"product_id": "notebook", "quantity": 2}],
+            "express",
+        )
+
+        self.assertEqual(1000, quote["subtotal_cents"])
+        self.assertEqual(0, quote["discount_cents"])
+        self.assertEqual(1200, quote["delivery_cents"])
+        self.assertEqual(2200, quote["total_cents"])
+
+
+    def test_student_express_quote(self):
+        quote = self.service.quote(
+            "student",
+            [{"product_id": "hoodie", "quantity": 2}],
+            "express",
+        )
+
+        self.assertEqual(8000, quote["subtotal_cents"])
+        self.assertEqual(800, quote["discount_cents"])
+        self.assertEqual(1200, quote["delivery_cents"])
+        self.assertEqual(8400, quote["total_cents"])
+
+
+    def test_express_delivery_is_charged_above_free_delivery_threshold(self):
+        quote = self.service.quote(
+            "regular",
+            [{"product_id": "hoodie", "quantity": 3}],
+            "express",
+        )
+
+        self.assertEqual(12000, quote["subtotal_cents"])
+        self.assertEqual(1200, quote["delivery_cents"])
+        self.assertEqual(13200, quote["total_cents"])
+
+
+    def test_express_quote_matches_placed_and_reopened_order(self):
+        items = [{"product_id": "hoodie", "quantity": 2}]
+
+        quote = self.service.quote("student", items, "express")
+        order = self.service.place_order("student", items, "express")
+
+        for field in (
+            "customer_type",
+            "fulfillment",
+            "items",
+            "subtotal_cents",
+            "discount_cents",
+            "delivery_cents",
+            "total_cents",
+        ):
+            self.assertEqual(quote[field], order[field])
+
+        reopened_service = OrderService(self.path)
+        reopened_order = reopened_service.get_order(order["order_id"])
+
+        self.assertEqual("express", reopened_order["fulfillment"])
+        self.assertEqual(800, reopened_order["discount_cents"])
+        self.assertEqual(1200, reopened_order["delivery_cents"])
+        self.assertEqual(8400, reopened_order["total_cents"])
+        self.assertEqual(items[0]["quantity"], reopened_order["items"][0]["quantity"])
+
+
+    def test_invalid_fulfillment_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.service.quote(
+                "regular",
+                [{"product_id": "notebook", "quantity": 2}],
+                "overnight",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
