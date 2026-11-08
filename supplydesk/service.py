@@ -21,8 +21,10 @@ class OrderService:
     def build_quote(self, state, customer_type, items, fulfillment):
         if customer_type not in ("regular", "student"):
             raise ValueError("Customer type must be regular or student.")
+
         if fulfillment not in ("pickup", "delivery"):
             raise ValueError("Fulfillment must be pickup or delivery.")
+
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
 
@@ -43,6 +45,7 @@ class OrderService:
                 raise ValueError("Unknown product.")
 
             quantity = item.get("quantity")
+
             if (type(quantity) is not int or quantity < 1
                     or quantity > self.MAX_ITEM_QUANTITY):
                 raise ValueError(
@@ -89,6 +92,12 @@ class OrderService:
             "total_cents": subtotal - discount + delivery,
         }
 
+    def _update_stock(self, state, items):
+        for line in items:
+            for product in state["catalog"]:
+                if product["product_id"] == line["product_id"]:
+                    product["stock"] -= line["quantity"]
+
     def quote(self, customer_type, items, fulfillment="pickup"):
         state = self.store.load()
         return self.build_quote(state, customer_type, items, fulfillment)
@@ -105,10 +114,7 @@ class OrderService:
             **quote
         }
 
-        for line in quote["items"]:
-            for product in state["catalog"]:
-                if product["product_id"] == line["product_id"]:
-                    product["stock"] -= line["quantity"]
+        self._update_stock(state, quote["items"])
 
         state["next_order_number"] += 1
         state["orders"].append(order)
